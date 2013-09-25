@@ -1,0 +1,22 @@
+{
+  "name": "import-io",
+  "description": "Lightweight client for accessing import.io",
+  "version": "1.0.0",
+  "author": "Import.io Developers <dev@import.io>",
+  "dependencies": {
+    "xmlhttprequest": "1.6.x",
+    "cookiejar": "1.0.x"
+  },
+  "main": "importio.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/import-io/client-js-mini.git"
+  },
+  "keywords": [
+    "import.io"
+  ],
+  "license": "MIT"
+}
