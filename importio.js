@@ -122,7 +122,7 @@ var importio = (function(inUserId, inApiKey, inHost, inNotRandomHost, notHttps) 
 		var queryUrl = url + (path ? path : "");
 
 		if (apiKey) {
-			queryUrl += "?_user=" + userId + "&_apikey=" + apiKey;
+			queryUrl += "?_user=" + userId + "&_apikey=" + encodeURIComponent(apiKey);
 		}
 
 		httpRequest("POST", queryUrl, "application/json;charset=UTF-8", JSON.stringify(data), function(status, type, data) {
