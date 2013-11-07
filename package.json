@@ -1,7 +1,7 @@
 {
   "name": "import-io",
   "description": "Lightweight client for accessing import.io",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": "Import.io Developers <dev@import.io>",
   "dependencies": {
     "xmlhttprequest": "1.6.x",
