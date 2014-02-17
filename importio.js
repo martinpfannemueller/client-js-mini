@@ -125,7 +125,7 @@ var importio = (function(inUserId, inApiKey, inHost, inNotRandomHost, notHttps) 
 			queryUrl += "?_user=" + userId + "&_apikey=" + encodeURIComponent(apiKey);
 		}
 
-		httpRequest("POST", queryUrl, "application/json;charset=UTF-8", JSON.stringify(data), function(status, type, data) {
+		httpRequest("POST", queryUrl, "application/json;charset=UTF-8", JSON.stringify([data]), function(status, type, data) {
 			if (status == 200 && type == "json") {
 				// Request succeeded
 				setTimeout(function() {
