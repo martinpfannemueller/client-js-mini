@@ -1,72 +1,89 @@
+/**
+* import.io client library
+* 
+* This file contains the interface required to connect to and query import.io APIs
+* 
+* @author: dev@import.io
+* @source: https://github.com/import-io/client-js-mini
+*/
 var importio = (function(inUserId, inApiKey, inHost, inNotRandomHost, notHttps) {
 
-	var host = "http" + (notHttps ? "" : "s") + "://" + (inNotRandomHost ? "" : (Math.random()*10e17 + ".")) + (inHost || "query.import.io");
+	// Create the host to connect to based on the configuration, and set up other config options
+	var domain = inHost || "import.io";
+	var host = "http" + (notHttps ? "" : "s") + "://" + (inNotRandomHost ? "" : (Math.random()*10e17 + ".")) + "query." + domain;
+	var url = host + "/query/comet/";
+	var messagingChannel = "/messaging";
 	var cookies = {};
 	var msgId = 1;
 	var clientId = false;
-	var url = host + "/query/comet/";
-	var messagingChannel = "/messaging";
 	var queries = {};
+	// The user's credentials
 	var userId = inUserId;
 	var apiKey = inApiKey;
 
-	var polling = false;
-	var connected = false;
+	// These variables serve to identify this client and its version to the server
+	var clientName = "import.io Mini JS client"
+	var clientVersion = "2.0.0"
 
-	// Cache of query callbacks
+	// State of our current connection to the platform
+	var connected = false;
+	var disconnecting = false;
+
+	// Every time a query is issued we need somewhere to store the callbacks
 	var queryCache = {};
 
 	/** Private methods */
 
-	// Wrap up callbacks
+	// This is a helper method which guarantees us a callable function irrespective of what the user provides
 	var getCB = function(cb) {
 		return cb || function() {};
 	}
 
-	// Detect if node.js
+	// We need a way to detect a node.js environment throughout the library
 	var isNode = function() {
 		return !(typeof window != 'undefined' && window.document);
 	}
 
-	// If node, set up a cookie jar
+	// If we are using node.js, then it doesn't handle cookies for
+	// us automatically, so we need to setup a cookie jar to use
 	var cookiejar, cj;
 	if (isNode()) {
 		cj = require("cookiejar");
 		cookiejar = new cj.CookieJar();
 	}
 
-	// Support for various browser XHR
+	// When not on node.js, we will use different XHR implementations depending on the browser we are in
 	var XMLHttpFactories = [
-		function () {return new XMLHttpRequest();},
-		function () {return new ActiveXObject("Msxml2.XMLHTTP");},
-		function () {return new ActiveXObject("Msxml3.XMLHTTP");},
-		function () {return new ActiveXObject("Microsoft.XMLHTTP");}
+		function () { return new XMLHttpRequest(); },
+		function () { return new ActiveXObject("Msxml2.XMLHTTP"); },
+		function () { return new ActiveXObject("Msxml3.XMLHTTP"); },
+		function () { return new ActiveXObject("Microsoft.XMLHTTP"); }
 	];
+	// Helper method to find a compatible XHR from the selection list in a browser
 	var getBrowserXHR = function() {
 		for (var i=0;i<XMLHttpFactories.length;i++) {
-		try {
-			return XMLHttpFactories[i]();
-		}
-		catch (e) {}
+			try {
+				return XMLHttpFactories[i]();
+			} catch (e) {}
 		}
 	}
 
-	// Helper to get an XHR object
+	// Helper to get an XHR object based on our environment
 	var getXHR = function() {
 		if (isNode()) {
-			// Node
+			// If we are in the node.js environment, we use the XHR node module
 			var xhrRequire = require("xmlhttprequest").XMLHttpRequest;
 			var obj = new xhrRequire();
-			// Disable header checking as we can't set cookies that way
+			// Disable header checking for this library as we can't set cookies otherwise
 			obj.setDisableHeaderCheck(true);
 			return obj;
 		} else {
-			// Browser
+			// For web browsers, find an XHR implementation from possible selections
 			return getBrowserXHR();
 		}
 	}
 
-	// Low level call to make an HTTP request
+	// Helper method that wraps up making an HTTP request
 	var httpRequest = function(method, url, contentType, body, callback) {
 		var xhr = getXHR();
 		var cb = getCB(callback);
@@ -78,6 +95,7 @@ var importio = (function(inUserId, inApiKey, inHost, inNotRandomHost, notHttps) 
 					text = JSON.parse(xhr.responseText);
 					type = "json";
 				} catch (e) {};
+				// If we are on node.js then we need to update the cookie jar
 				if (isNode()) {
 					var cookies = xhr.getResponseHeader("Set-Cookie");
 					if (cookies) {
@@ -92,8 +110,9 @@ var importio = (function(inUserId, inApiKey, inHost, inNotRandomHost, notHttps) 
 		if (body && method != "GET") {
 			xhr.setRequestHeader("Content-Type", contentType);
 		}
+		// If we are on node.js then we need to check the cookie jar
 		if (isNode()) {
-			var cookies = cookiejar.getCookies(new cj.CookieAccessInfo(".import.io"));
+			var cookies = cookiejar.getCookies(new cj.CookieAccessInfo("." + domain));
 			var cookieString = [];
 			cookies.map(function(cookie) {
 				cookieString.push(cookie.toValueString());
@@ -103,70 +122,91 @@ var importio = (function(inUserId, inApiKey, inHost, inNotRandomHost, notHttps) 
 		xhr.send(body);
 	}
 
-	// Make a comet message
+	// Helper method that makes a generic request on the CometD messaging channel
 	var request = function(channel, path, data, callback) {
 		if (!data) {
 			data = {};
 		}
 		var cb = getCB(callback);
 
+		// These are CometD configuration values that are common to all requests we need to send
 		data["channel"] = channel;
 		data["connectionType"] = "long-polling";
+
+		// We need to increment the message ID with each request that we send
 		data["id"] = msgId;
 		msgId++;
 
+		// If we have a client ID, then we need to send that (will be provided on handshake)
 		if (clientId) {
 			data["clientId"] = clientId;
 		}
 
+		// Build the URL that we are going to request
 		var queryUrl = url + (path ? path : "");
 
+		// If the user has chosen API key authentication, we need to send the API key with each request
 		if (apiKey) {
 			queryUrl += "?_user=" + userId + "&_apikey=" + encodeURIComponent(apiKey);
 		}
 
 		httpRequest("POST", queryUrl, "application/json;charset=UTF-8", JSON.stringify([data]), function(status, type, data) {
 			if (status == 200 && type == "json") {
-				// Request succeeded
+				// Request succeeded - we call the callback in a timeout to allow us to return
 				setTimeout(function() {
 					cb(true, data);
 				}, 1);
 				setTimeout(function() {
+					// Iterate through each of the messages that were returned
 					data.map(function(msg) {
+
+						// In this case, a browser has connected multiple clients on the same domain - rarely occurs when random host is enabled
 						if (msg.hasOwnProperty("advice") && msg.advice.hasOwnProperty("multiple-clients") && msg.advice["multiple-clients"]) {
-							console.error("Multiple clients detected, stopping polling");
-							stopPolling();
+							console.error("Multiple clients detected, disconnecting");
+							disconnect();
+							return;
 						}
 
+						// For the message, check that the request ID matches one we sent earlier
 						if (msg.channel == messagingChannel && msg.data.hasOwnProperty("requestId")) {
 							var reqId = msg.data.requestId;
 							if (queryCache.hasOwnProperty(reqId)) {
 
+								// Check the type of the message to see what we are working with
 								switch (msg.data.type) {
 									case "SPAWN":
+										// A spawn message means that a new job is being initialised on the server
 										queryCache[reqId].spawned++;
 										break;
 									case "INIT":
 									case "START":
+										// Init and start indicate that a page of work has been started on the server
 										queryCache[reqId].started++;
 										break;
 									case "STOP":
+										// Stop indicates that a job has finished on the server
 										queryCache[reqId].completed++;
 										break;
 								}
 
+								// Update the finished state
+								// The query is finished if we have started some jobs, we have finished as many as we started, and we have started as many as we have spawned
+								// There is a +1 on jobsSpawned because there is an initial spawn to cover initialising all of the jobs for the query
 								var finished = (queryCache[reqId].started == queryCache[reqId].completed) && (queryCache[reqId].spawned + 1 == queryCache[reqId].started) && (queryCache[reqId].started > 0);
 
+								// Now we have updated the status, call the callback
 								setTimeout(function() {
 									queryCache[reqId].callback(finished, msg.data);
 								}, 1);
 							} else {
+								// We couldn't find the request ID for this message, so log an error and ignore it
 								console.error("Request ID", reqId, "does not match any known", queryCache);
 							}
 						}
 					});
 				}, 1);
 			} else {
+				// A non-200 returned, which is an error condition
 				setTimeout(function() {
 					cb(false);
 				}, 1);
@@ -174,7 +214,7 @@ var importio = (function(inUserId, inApiKey, inHost, inNotRandomHost, notHttps) 
 		});
 	}
 
-	// Do a comet handshake
+	// This method uses the request helper to issue a CometD subscription request for this client on the server
 	var handshake = function(callback) {
 		var cb = getCB(callback);
 		request("/meta/handshake", "handshake", {"version":"1.0","minimumVersion":"0.9","supportedConnectionTypes":["long-polling"],"advice":{"timeout":60000,"interval":0}}, function(result, data) {
@@ -186,68 +226,99 @@ var importio = (function(inUserId, inApiKey, inHost, inNotRandomHost, notHttps) 
 		});
 	}
 
+	// This method is called to open long-polling HTTP connections to the import.io
+	// CometD server so that we can wait for any messages that the server needs to send to us
 	var startPolling = function() {
-		polling = true;
 		
-		var cb;
-		cb = function(result, data) {
-			if (polling) {
-				request("/meta/connect", "connect", false, cb);
+		var poll;
+		poll = function(result, data) {
+			if (connected) {
+				request("/meta/connect", "connect", false, poll);
 			}
 		}
-		cb();
+		poll();
 	}
 
-	var stopPolling = function() {
-		polling = false;
-	}
-
-	/** Public methods */
-
-	// Do a comet connect
-	var connect = function(callback) {
+	// This method uses the request helper to issue a CometD subscription request for this client on the server
+	var subscribe = function(channel, callback) {
 		var cb = getCB(callback);
+		request("/meta/subscribe", false, { "subscription": messagingChannel }, cb);
+	}
+
+	// Connect this client to the import.io server if not already connected
+	var connect = function(callback) {
+		// Don't connect again if we're already connected
+		if (connected) {
+			return;
+		}
+
+		var cb = getCB(callback);
+		// Do the hanshake request to register the client on the server
 		handshake(function(res) {
 			if (!res) {
 				return cb(false);
 			}
 
-			request("/meta/subscribe", false, {"subscription": messagingChannel}, function(result, data) {
+			// Register this client with a subscription to our chosen message channel
+			subscribe(messagingChannel, function(result, data) {
 				if (!result) {
 					connected = false;
 					return cb(false);
 				}
+				// Now we are subscribed, we can set the client as connected
 				connected = true;
+				// Start the polling to receive messages from the server
 				startPolling();
+				// Callback with success message
 				cb(true);
 			});
 		});
 	}
 
-	// Log in using cookie auth
-	var login = function(username, password, callback, host) {
-		httpRequest("POST", (host ? host : "https://api.import.io") + "/auth/login", "application/x-www-form-urlencoded", "username=" + username + "&password=" + password, callback);
+	// Disconnects the client from the server, cleaning up resources
+	var disconnect = function() {
+		// Set the flag to notify handlers that we are disconnecting, i.e. open connect calls will fail
+		disconnecting = true;
+		// Set the connection status flag in the library to prevent any other requests going out
+		connected = false;
+		// Make the disconnect request to the server
+		request("/meta/disconnect", false, false, function() {
+			// Now we are disconnected we need to remove the client ID
+			clientId = false;
+			// We are done disconnecting so reset the flag
+			disconnecting = false;
+		});
 	}
 
-	// Execute a query
+	// Log in to import.io using a username and password
+	var login = function(username, password, callback, host) {
+		httpRequest("POST", "https://api." + domain + "/auth/login", "application/x-www-form-urlencoded", "username=" + username + "&password=" + password, callback);
+	}
+
+	// This method takes an import.io Query object and issues it to the server, calling the callback
+	// whenever a relevant message is received
 	var query = function(query, callback) {
 		if (!connected) {
 			console.error("Call and wait for connect() before calling query()")
 			return false;
 		}
-		query.requestId = Math.random()*10e17;
+		// Generate a random Request ID we can use to identify messages for this query
+		query.requestId = "" + Math.random()*10e17;
+		// Construct a new query state tracker and store it in our map of currently running queries
 		queryCache[query.requestId] = {
 			"callback": callback,
 			"spawned": 0,
 			"started": 0,
 			"completed": 0
 		}
+		// Issue the query to the server
 		request("/service/query", false, { "data": query });
 	}
 
 	// Return interface
 	return {
 		"connect": connect,
+		"disconnect": disconnect,
 		"login": login,
 		"query": query,
 		"isNode": isNode
@@ -255,7 +326,7 @@ var importio = (function(inUserId, inApiKey, inHost, inNotRandomHost, notHttps) 
 
 });
 
+// If we are running on node.js then we need to export an interface
 if (new importio().isNode()) {
-	// Node, so export package
 	exports["client"] = importio;
 }

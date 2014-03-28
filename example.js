@@ -2,7 +2,7 @@
 var importio = require("import-io").client;
 
 // This initialises with API key authentication
-var io = new importio("YOUR_USER_GUID", "YOUR_API_KEY", "query.import.io");
+var io = new importio("YOUR_USER_GUID", "YOUR_API_KEY", "import.io");
 
 // Connect to the server
 io.connect(function(connected) {
