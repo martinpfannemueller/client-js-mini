@@ -83,7 +83,7 @@ var beginConnect = function() {
 
 		// Issue three queries to the same data source with different inputs
 		// You can modify the inputs and connectorGuids so as to query your own sources
-		// To find out more, visit the integrate page at http://import.io/data/integrate/#minijs
+		// To find out more, visit the integrate page at http://import.io/data/integrate/#nodejs
 		
 		// Also increment the number of queries we are running
 		runningQueries += 3;
