@@ -118,6 +118,8 @@ var importio = (function(inUserId, inApiKey, inHost, inNotRandomHost, notHttps) 
 				cookieString.push(cookie.toValueString());
 			});
 			xhr.setRequestHeader("Cookie", cookieString.join(";"));
+			xhr.setRequestHeader("import-io-client", clientName);
+			xhr.setRequestHeader("import-io-client-version", clientVersion);
 		}
 		xhr.send(body);
 	}
@@ -292,7 +294,14 @@ var importio = (function(inUserId, inApiKey, inHost, inNotRandomHost, notHttps) 
 
 	// Log in to import.io using a username and password
 	var login = function(username, password, callback) {
-		httpRequest("POST", "https://api." + domain + "/auth/login", "application/x-www-form-urlencoded", "username=" + username + "&password=" + password, callback);
+		var cb = getCB(callback);
+		httpRequest("POST", "https://api." + domain + "/auth/login", "application/x-www-form-urlencoded", "username=" + username + "&password=" + password, function(code, type, data) {
+			if (code == 200) {
+				callback(true);
+			} else {
+				callback(false);
+			}
+		});
 	}
 
 	// This method takes an import.io Query object and issues it to the server, calling the callback

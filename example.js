@@ -1,4 +1,4 @@
-*
+/**
 * import.io client library - node.js example code
 * 
 * This file is an example for integrating with import.io using the JS client library in node.js
