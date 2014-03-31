@@ -112,7 +112,7 @@ var importio = (function(inUserId, inApiKey, inHost, inNotRandomHost, notHttps) 
 		}
 		// If we are on node.js then we need to check the cookie jar
 		if (isNode()) {
-			var cookies = cookiejar.getCookies(new cj.CookieAccessInfo("." + domain));
+			var cookies = cookiejar.getCookies(new cj.CookieAccessInfo("." + domain, "/", true, false));
 			var cookieString = [];
 			cookies.map(function(cookie) {
 				cookieString.push(cookie.toValueString());
@@ -291,7 +291,7 @@ var importio = (function(inUserId, inApiKey, inHost, inNotRandomHost, notHttps) 
 	}
 
 	// Log in to import.io using a username and password
-	var login = function(username, password, callback, host) {
+	var login = function(username, password, callback) {
 		httpRequest("POST", "https://api." + domain + "/auth/login", "application/x-www-form-urlencoded", "username=" + username + "&password=" + password, callback);
 	}
 
