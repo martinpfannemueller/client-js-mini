@@ -10,7 +10,7 @@ var importio = (function(inUserId, inApiKey, inHost, inNotRandomHost, notHttps) 
 
 	// Create the host to connect to based on the configuration, and set up other config options
 	var domain = inHost || "import.io";
-	var host = "http" + (notHttps ? "" : "s") + "://" + (inNotRandomHost ? "" : (Math.random()*10e17 + ".")) + "query." + domain;
+	var host = "http" + (notHttps ? "" : "s") + "://" + (inNotRandomHost ? "" : (Math.random()*10e19 + ".")) + "query." + domain;
 	var url = host + "/query/comet/";
 	var messagingChannel = "/messaging";
 	var cookies = {};
@@ -351,7 +351,7 @@ var importio = (function(inUserId, inApiKey, inHost, inNotRandomHost, notHttps) 
 			return false;
 		}
 		// Generate a random Request ID we can use to identify messages for this query
-		query.requestId = "" + Math.random()*10e17;
+		query.requestId = "" + Math.random()*10e19;
 		// Construct a new query state tracker and store it in our map of currently running queries
 		queryCache[query.requestId] = {
 			"callback": callback,
