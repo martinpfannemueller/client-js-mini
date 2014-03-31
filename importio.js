@@ -26,6 +26,7 @@ var importio = (function(inUserId, inApiKey, inHost, inNotRandomHost, notHttps) 
 
 	// State of our current connection to the platform
 	var connected = false;
+	var connecting = false;
 	var disconnecting = false;
 
 	// Every time a query is issued we need somewhere to store the callbacks
@@ -169,7 +170,7 @@ var importio = (function(inUserId, inApiKey, inHost, inNotRandomHost, notHttps) 
 						}
 
 						if (msg.hasOwnProperty("successful") && !msg.successful) {
-							if (!disconnecting && connected) {
+							if (!disconnecting && connected && !connecting) {
 								// If we get a 402 unknown client we need to reconnect
 								if (msg.hasOwnProperty("error") && msg.error == "402::Unknown client") {
 									console.error("402 received, reconnecting");
@@ -270,9 +271,10 @@ var importio = (function(inUserId, inApiKey, inHost, inNotRandomHost, notHttps) 
 	// Connect this client to the import.io server if not already connected
 	var connect = function(callback) {
 		// Don't connect again if we're already connected
-		if (connected) {
+		if (connected || connecting) {
 			return;
 		}
+		connecting = true;
 
 		var cb = getCB(callback);
 		// Do the hanshake request to register the client on the server
@@ -291,6 +293,7 @@ var importio = (function(inUserId, inApiKey, inHost, inNotRandomHost, notHttps) 
 				connected = true;
 				// Start the polling to receive messages from the server
 				startPolling();
+				connecting = false;
 				// Callback with success message
 				cb(true);
 			});
@@ -340,7 +343,11 @@ var importio = (function(inUserId, inApiKey, inHost, inNotRandomHost, notHttps) 
 	// whenever a relevant message is received
 	var query = function(query, callback) {
 		if (!connected) {
-			console.error("Call and wait for connect() before calling query()")
+			if (connecting) {
+				console.error("Wait for the connect() call to finish (use the callback function) before calling query()");
+			} else {
+				console.error("Call and wait for connect() before calling query()")
+			}
 			return false;
 		}
 		// Generate a random Request ID we can use to identify messages for this query
