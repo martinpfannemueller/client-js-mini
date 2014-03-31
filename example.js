@@ -31,7 +31,6 @@ var io = new importio("YOUR_USER_GUID", "YOUR_API_KEY");
 //});
 
 var beginConnect = function() {
-	console.log("Beginning");
 	// Once we have started the client and authenticated, we need to connect it to the server:
 	io.connect(function(connected) {
 		// Make sure that your code to use the library only runs after this callback has returned, 
