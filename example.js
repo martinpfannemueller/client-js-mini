@@ -53,6 +53,10 @@ var beginConnect = function() {
 		// This method will receive each message that comes back from the queries, and we can take that
 		// data and store it for use in our app
 		var callback = function(finished, message) {
+			// Disconnect messages happen if we disconnect the client library while a query is in progress
+			if (message.type == "DISCONNECT") {
+				console.error("The query was cancelled as the client was disconnected");
+			}
 			// Check the message we receive actually has some data in it
 			if (message.type == "MESSAGE") {
 				if (message.data.hasOwnProperty("errorType")) {

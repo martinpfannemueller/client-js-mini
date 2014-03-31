@@ -182,6 +182,53 @@ queueTest(function(runNextTest) {
 	});
 });
 
+/**
+* Test 8
+*
+* Tests querying a working source twice, with a client ID change in the middle
+*/
+queueTest(function(runNextTest) {
+	var data = [];
+	var runningQueries = 0;
+	var disconnectMessages = 0;
+	var client = new importio(userguid, apikey, host);
+	var callback;
+	callback = function(finished, message) {
+		if (message.type == "MESSAGE") {
+			message.data.results.map(function(result) {
+				data.push(result["name"]);
+			});
+		}
+		if (message.type == "DISCONNECT") {
+			disconnectMessages++;
+		}
+		if (finished) {
+			runningQueries--;
+			if (runningQueries == 2) {
+				client.testSetClientId("random");
+				// This query will fail
+				client.query({ "input":{ "query": "server" }, "connectorGuids": [ "1ac5de1d-cf28-4e8a-b56f-3c42a24b1ef2" ] }, callback);
+			} else if (runningQueries == 1) {
+				// Need to wait for it to reconnect first
+				setTimeout(function() {
+					client.query({ "input":{ "query": "server" }, "connectorGuids": [ "1ac5de1d-cf28-4e8a-b56f-3c42a24b1ef2" ] }, callback);
+				}, 5000);
+			} else if (runningQueries <= 0) {
+				assert.deepEqual(data.slice(0, expectedData.length), expectedData);
+				assert.deepEqual(data.slice(expectedData.length, expectedData.length*2), expectedData);
+				assert.equal(disconnectMessages, 1);
+				console.log("Test 8: Success");
+				client.disconnect();
+				runNextTest();
+			}
+		}
+	}
+	client.connect(function(result) {
+		runningQueries += 3;
+		client.query({ "input":{ "query": "server" }, "connectorGuids": [ "1ac5de1d-cf28-4e8a-b56f-3c42a24b1ef2" ] }, callback);
+	});
+});
+
 // Queue exiting the script
 queueTest(function() {
 	console.log("All tests completed");

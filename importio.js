@@ -16,7 +16,6 @@ var importio = (function(inUserId, inApiKey, inHost, inNotRandomHost, notHttps) 
 	var cookies = {};
 	var msgId = 1;
 	var clientId = false;
-	var queries = {};
 	// The user's credentials
 	var userId = inUserId;
 	var apiKey = inApiKey;
@@ -169,37 +168,58 @@ var importio = (function(inUserId, inApiKey, inHost, inNotRandomHost, notHttps) 
 							return;
 						}
 
+						if (msg.hasOwnProperty("successful") && !msg.successful) {
+							if (!disconnecting && connected) {
+								// If we get a 402 unknown client we need to reconnect
+								if (msg.hasOwnProperty("error") && msg.error == "402::Unknown client") {
+									console.error("402 received, reconnecting");
+									disconnect(function() {
+										// Once disconnected, reconnect
+										connect();
+									});
+								} else {
+									console.error("Unsuccessful request: ", msg);
+									return;
+								}
+							}
+						}
+
 						// For the message, check that the request ID matches one we sent earlier
 						if (msg.channel == messagingChannel && msg.data.hasOwnProperty("requestId")) {
 							var reqId = msg.data.requestId;
 							if (queryCache.hasOwnProperty(reqId)) {
-
+								var query = queryCache[reqId];
 								// Check the type of the message to see what we are working with
 								switch (msg.data.type) {
 									case "SPAWN":
 										// A spawn message means that a new job is being initialised on the server
-										queryCache[reqId].spawned++;
+										query.spawned++;
 										break;
 									case "INIT":
 									case "START":
 										// Init and start indicate that a page of work has been started on the server
-										queryCache[reqId].started++;
+										query.started++;
 										break;
 									case "STOP":
 										// Stop indicates that a job has finished on the server
-										queryCache[reqId].completed++;
+										query.completed++;
 										break;
 								}
 
 								// Update the finished state
 								// The query is finished if we have started some jobs, we have finished as many as we started, and we have started as many as we have spawned
 								// There is a +1 on jobsSpawned because there is an initial spawn to cover initialising all of the jobs for the query
-								var finished = (queryCache[reqId].started == queryCache[reqId].completed) && (queryCache[reqId].spawned + 1 == queryCache[reqId].started) && (queryCache[reqId].started > 0);
+								var finished = (query.started == query.completed) && (query.spawned + 1 == query.started) && (query.started > 0);
 
 								// Now we have updated the status, call the callback
 								setTimeout(function() {
-									queryCache[reqId].callback(finished, msg.data);
+									query.callback(finished, msg.data);
 								}, 1);
+								// Remove the query from the cache once it has finished
+								if (finished) {
+									delete queryCache[reqId];
+								}
+
 							} else {
 								// We couldn't find the request ID for this message, so log an error and ignore it
 								console.error("Request ID", reqId, "does not match any known", queryCache);
@@ -278,7 +298,13 @@ var importio = (function(inUserId, inApiKey, inHost, inNotRandomHost, notHttps) 
 	}
 
 	// Disconnects the client from the server, cleaning up resources
-	var disconnect = function() {
+	var disconnect = function(callback) {
+		var cb = getCB(callback);
+		// Send a "disconnected" message to all of the current queries, and then remove them
+		for (var k in queryCache) {
+			queryCache[k].callback(true, { "type": "DISCONNECT", "requestId": k });
+			delete queryCache[k];
+		}
 		// Set the flag to notify handlers that we are disconnecting, i.e. open connect calls will fail
 		disconnecting = true;
 		// Set the connection status flag in the library to prevent any other requests going out
@@ -287,8 +313,14 @@ var importio = (function(inUserId, inApiKey, inHost, inNotRandomHost, notHttps) 
 		request("/meta/disconnect", false, false, function() {
 			// Now we are disconnected we need to remove the client ID
 			clientId = false;
+			// If we are node.js then we need to trash the cookies too, else we will get multiple clients
+			if (isNode()) {
+				cookiejar = new cj.CookieJar();
+			}
 			// We are done disconnecting so reset the flag
 			disconnecting = false;
+			// Call the callback to indicate we are done
+			cb();
 		});
 	}
 
@@ -330,7 +362,10 @@ var importio = (function(inUserId, inApiKey, inHost, inNotRandomHost, notHttps) 
 		"disconnect": disconnect,
 		"login": login,
 		"query": query,
-		"isNode": isNode
+		"isNode": isNode,
+		"testSetClientId": function(n) {
+			clientId = n;
+		}
 	}
 
 });
