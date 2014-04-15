@@ -15,7 +15,7 @@ var importio = (function(inUserId, inApiKey, inHost) {
 	var userId = inUserId;
 	var apiKey = inApiKey;
 
-	// The user's username/password if used
+	// The user's username/password if used instead of user GUID / API key for auth
 	var username = false;
 	var password = false;
 
@@ -25,7 +25,7 @@ var importio = (function(inUserId, inApiKey, inHost) {
 	// A queue of messages ready to be sent to the server when we reconnect
 	var queue = [];
 
-	/* A session which helps us manage our connection to the server */
+	/* A session class which helps us manage our connection to the server */
 	var session = (function(inIo, inHost, inUserGuid, inApiKey) {
 
 		// Initialise the session with its configuration
@@ -56,7 +56,7 @@ var importio = (function(inUserId, inApiKey, inHost) {
 		// If we are using node.js, then it doesn't handle cookies for
 		// us automatically, so we need to setup a cookie jar to use
 		var cookiejar, cj;
-		if (isNode()) {
+		if (io.isNode()) {
 			cj = require("cookiejar");
 			cookiejar = new cj.CookieJar();
 		}
@@ -176,13 +176,14 @@ var importio = (function(inUserId, inApiKey, inHost) {
 						// Iterate through each of the messages that were returned
 						data.map(function(msg) {
 
-							// In this case, a browser has connected multiple clients on the same domain - rarely occurs when random host is enabled
+							// In this case, a browser has connected multiple clients on the same domain
 							if (msg.hasOwnProperty("advice") && msg.advice.hasOwnProperty("multiple-clients") && msg.advice["multiple-clients"]) {
 								console.error("Multiple clients detected, disconnecting");
 								disconnect();
 								return;
 							}
 
+							// If the message is not successful, i.e. an import.io server error has occurred, decide what action to take
 							if (msg.hasOwnProperty("successful") && !msg.successful) {
 								if (!disconnecting && connected && !connecting) {
 									// If we get a 402 unknown client we need to reconnect
@@ -233,7 +234,7 @@ var importio = (function(inUserId, inApiKey, inHost) {
 									}
 
 								} else {
-									// We couldn't find the request ID for this message, so log an error and ignore it
+									// We couldn't find the request ID for this message, so log an error and ignore the message
 									console.error("Request ID", reqId, "does not match any known", queries);
 								}
 							}
@@ -290,6 +291,8 @@ var importio = (function(inUserId, inApiKey, inHost) {
 			// Do the hanshake request to register the client on the server
 			handshake(function(res) {
 				if (!res) {
+					connected = false;
+					connecting = false;
 					return cb(false);
 				}
 
@@ -297,6 +300,7 @@ var importio = (function(inUserId, inApiKey, inHost) {
 				subscribe(messagingChannel, function(result, data) {
 					if (!result) {
 						connected = false;
+						connecting = false;
 						return cb(false);
 					}
 					// Now we are subscribed, we can set the client as connected
@@ -328,10 +332,6 @@ var importio = (function(inUserId, inApiKey, inHost) {
 			request("/meta/disconnect", false, false, function() {
 				// Now we are disconnected we need to remove the client ID
 				clientId = false;
-				// If we are node.js then we need to trash the cookies too, else we will get multiple clients
-				if (io.isNode()) {
-					cookiejar = new cj.CookieJar();
-				}
 				// We are done disconnecting so reset the flag
 				disconnecting = false;
 				// Call the callback to indicate we are done
@@ -343,6 +343,7 @@ var importio = (function(inUserId, inApiKey, inHost) {
 		// CometD server so that we can wait for any messages that the server needs to send to us
 		var startPolling = function() {
 			
+			// Make sure we are not polling already first
 			if (polling) {
 				console.log("Already polling, so not polling again");
 				return;
@@ -438,6 +439,7 @@ var importio = (function(inUserId, inApiKey, inHost) {
 		console.log("Reconnecting");
 
 		var disconnectCB = function() {
+			// Reconnect using username/password if required
 			if (username) {
 				login(username, password, cb);
 			} else {
@@ -462,7 +464,7 @@ var importio = (function(inUserId, inApiKey, inHost) {
 		// Check if there is a session already first
 		if (currentSession) {
 			console.error("Already have a session, using that; call disconnect() to end it");
-			cb(false);
+			cb(true);
 			return;
 		}
 
