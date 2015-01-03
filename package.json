@@ -4,7 +4,7 @@
   "version": "2.0.0",
   "author": "Import.io Developers <dev@import.io>",
   "dependencies": {
-    "xmlhttprequest": "1.6.x",
+    "xmlhttprequest": "https://github.com/driverdan/node-XMLHttpRequest/tarball/master",
     "cookiejar": "1.3.x"
   },
   "main": "importio.js",
